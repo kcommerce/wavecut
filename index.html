@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>WaveCut — MP3 Editor</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- lamejs for MP3 encoding (optional, falls back to WAV if unavailable) -->
+  <script>
+    // We'll try to load lamejs; if it fails, we use WAV fallback
+    window.LAME_LOADED = false;
+  </script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════ HEADER -->
+<header class="app-header">
+  <div class="logo">
+    <span class="logo-icon">◈</span>
+    <span class="logo-text">WaveCut</span>
+    <span class="logo-sub">MP3 Editor</span>
+  </div>
+  <div class="header-info" id="fileInfo" style="display:none">
+    <span class="info-name" id="infoName">—</span>
+    <span class="info-pill" id="infoDuration">0:00</span>
+    <span class="info-pill" id="infoSize">0 KB</span>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════ DROP ZONE -->
+<div class="drop-zone" id="dropZone">
+  <div class="drop-content">
+    <div class="drop-icon">♫</div>
+    <p class="drop-title">Drop your MP3 here</p>
+    <p class="drop-sub">or click to browse</p>
+    <button class="btn-upload" id="btnUpload">Choose File</button>
+    <input type="file" id="fileInput" accept="audio/mp3,audio/mpeg,audio/*" hidden />
+    <p class="drop-hint">Supports MP3 · WAV · OGG · M4A</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ EDITOR (hidden until file loaded) -->
+<div class="editor-container" id="editorContainer" style="display:none">
+
+  <!-- WAVEFORM PANEL -->
+  <div class="waveform-panel">
+    <div class="waveform-toolbar">
+      <div class="zoom-controls">
+        <button class="icon-btn" id="btnZoomOut" title="Zoom Out">−</button>
+        <span class="zoom-label" id="zoomLabel">1×</span>
+        <button class="icon-btn" id="btnZoomIn" title="Zoom In">+</button>
+      </div>
+      <div class="selection-info" id="selectionInfo">
+        <span class="sel-label">Selection:</span>
+        <span id="selStart">—</span>
+        <span class="sel-sep">→</span>
+        <span id="selEnd">—</span>
+        <span class="sel-duration" id="selDuration"></span>
+      </div>
+      <div class="waveform-actions">
+        <button class="icon-btn" id="btnSelectAll" title="Select All">⊡ All</button>
+        <button class="icon-btn" id="btnClearSel" title="Clear Selection">✕ Clear</button>
+      </div>
+    </div>
+
+    <!-- Waveform canvas wrapper -->
+    <div class="waveform-wrapper" id="waveformWrapper">
+      <canvas id="waveformCanvas"></canvas>
+      <!-- Playhead -->
+      <div class="playhead" id="playhead"></div>
+      <!-- Selection overlay -->
+      <div class="selection-overlay" id="selectionOverlay"></div>
+      <!-- Marker layer -->
+      <div class="marker-layer" id="markerLayer"></div>
+    </div>
+
+    <!-- Time ruler -->
+    <div class="time-ruler" id="timeRuler"></div>
+
+    <!-- Scroll bar -->
+    <div class="scroll-track" id="scrollTrack">
+      <div class="scroll-thumb" id="scrollThumb"></div>
+    </div>
+  </div>
+
+  <!-- PLAYBACK CONTROLS -->
+  <div class="playback-bar">
+    <div class="time-display">
+      <span id="currentTime">0:00.0</span>
+      <span class="time-sep">/</span>
+      <span id="totalTime">0:00</span>
+    </div>
+
+    <div class="transport">
+      <button class="transport-btn" id="btnStop" title="Stop">■</button>
+      <button class="transport-btn primary" id="btnPlay" title="Play/Pause">▶</button>
+      <button class="transport-btn" id="btnLoop" title="Loop Selection" class="loop-off">↺</button>
+    </div>
+
+    <div class="speed-control">
+      <span class="ctrl-label">Speed</span>
+      <input type="range" id="speedSlider" min="0.5" max="2" step="0.05" value="1" />
+      <span id="speedLabel">1.0×</span>
+    </div>
+
+    <div class="volume-control">
+      <span class="ctrl-label">Vol</span>
+      <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" />
+      <span id="volumeLabel">100%</span>
+    </div>
+  </div>
+
+  <!-- EDITING TOOLS -->
+  <div class="edit-tools">
+    <div class="tools-group">
+      <span class="tools-label">Edit</span>
+      <button class="tool-btn" id="btnTrim" title="Keep selected region">
+        <span class="btn-icon">✂</span>
+        <span class="btn-text">Trim</span>
+      </button>
+      <button class="tool-btn" id="btnDelete" title="Remove selected region">
+        <span class="btn-icon">⌫</span>
+        <span class="btn-text">Delete</span>
+      </button>
+      <button class="tool-btn" id="btnAddMarker" title="Add split marker at playhead">
+        <span class="btn-icon">|</span>
+        <span class="btn-text">Marker</span>
+      </button>
+      <button class="tool-btn" id="btnClearMarkers" title="Clear all markers">
+        <span class="btn-icon">✕</span>
+        <span class="btn-text">Clear Markers</span>
+      </button>
+      <button class="tool-btn" id="btnSplit" title="Split at all markers">
+        <span class="btn-icon">⋮</span>
+        <span class="btn-text">Split</span>
+      </button>
+      <button class="tool-btn" id="btnUndo" title="Undo last edit">
+        <span class="btn-icon">↩</span>
+        <span class="btn-text">Undo</span>
+      </button>
+    </div>
+
+    <div class="tools-group">
+      <span class="tools-label">Export</span>
+      <button class="tool-btn accent" id="btnExport" title="Export audio">
+        <span class="btn-icon">↓</span>
+        <span class="btn-text">Export</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- SEGMENTS PANEL (shown after split) -->
+  <div class="segments-panel" id="segmentsPanel" style="display:none">
+    <div class="segments-header">
+      <span>Segments</span>
+      <button class="icon-btn" id="btnExportAll">Export All</button>
+    </div>
+    <div class="segments-list" id="segmentsList"></div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════ EXPORT MODAL -->
+<div class="modal-backdrop" id="exportModal" style="display:none">
+  <div class="modal">
+    <h2 class="modal-title">Export Audio</h2>
+    <div class="modal-field">
+      <label>Filename</label>
+      <input type="text" id="exportName" placeholder="output" />
+    </div>
+    <div class="modal-field">
+      <label>Format</label>
+      <div class="format-btns">
+        <button class="fmt-btn active" data-fmt="wav">WAV</button>
+        <button class="fmt-btn" data-fmt="mp3" id="fmtMp3">MP3 <span class="fmt-note">(needs encoder)</span></button>
+      </div>
+    </div>
+    <div class="modal-field" id="exportScopeField">
+      <label>Export</label>
+      <div class="format-btns">
+        <button class="fmt-btn active" data-scope="full">Full Audio</button>
+        <button class="fmt-btn" data-scope="selection" id="scopeSelection">Selection Only</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancelExport">Cancel</button>
+      <button class="btn-confirm" id="btnConfirmExport">Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════ PROGRESS OVERLAY -->
+<div class="progress-overlay" id="progressOverlay" style="display:none">
+  <div class="progress-box">
+    <div class="progress-spinner"></div>
+    <p id="progressLabel">Processing…</p>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressBarFill"></div>
+    </div>
+  </div>
+</div>
+
+<script src="audio-utils.js"></script>
+<script src="encoder.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
